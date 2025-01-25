@@ -14,6 +14,11 @@ class SDL2Window:
         self.running = False
         self.renderer = None
         self.margin = margin
+        self.grid_y = (0 + margin[0], size[1] - margin[0])
+        self.grid_y_length = self.grid_y[1] - self.grid_y[0]
+        self.data_max = 0
+        self.data_min = 0
+        self.data_length = 0
 
         self.quit_event = asyncio.Event()  # Event to signal the window to quit
 
@@ -26,7 +31,9 @@ class SDL2Window:
             "high": [0] * self.cols,
             "low": [0] * self.cols,
             "x_start": [0] * self.cols,
-            "x_end": [0] * self.cols
+            "x_end": [0] * self.cols,
+            "y_start": [0] * self.cols,
+            "y_end": [0] * self.cols
         }
 
         self.candles = pd.DataFrame(candles_dict)
@@ -79,6 +86,8 @@ class SDL2Window:
 
         filtered_candles = self.candles[self.candles["information"] == True] # Get the candles with information
 
+        self.updataDataChars(candle)
+
         if not filtered_candles.empty: # If there is a candle with information
             last_candle_index = filtered_candles.index[-1]
 
@@ -98,12 +107,40 @@ class SDL2Window:
             self.candles = pd.concat([candle, self.candles], ignore_index=True) # Add the candle to the dataframe on the first position
 
         self.getCandlesXCoord()
+        self.getCandlesYCoord()
+
+        print(self.candles)
 
     def getCandlesXCoord(self):
         """Define the x-coordinates of the candles."""
         self.candles["x_start"] = np.arange(0, len(self.candles) * self.grid_size, self.grid_size)
         self.candles["x_start"] = self.margin[0] + self.candles["x_start"]
         self.candles["x_end"] = self.candles["x_start"] + self.grid_size
+
+    def updataDataChars(self, candle: dict):
+        """Update the information of the candle."""
+        changes = False
+
+        if candle["high"] > self.data_max:
+            self.data_max = candle["high"]
+            changes = True
+        
+        if candle["low"] < self.data_min:
+            self.data_min = candle["low"]
+            changes = True
+
+        if changes:
+            self.data_length = self.data_max - self.data_min
+
+    def getCandlesYCoord(self):
+        """Define the y-coordinates of the candles."""
+        # Create a mask for candles where information is True
+        mask = self.candles['information'] == True
+
+        # Apply the calculation to only those rows where the condition is True to minimize the number of calculations
+        self.candles.loc[mask, 'y_start'] = self.grid_y[0] + (self.candles.loc[mask, 'low'] - self.data_min) * self.grid_y_length / self.data_length
+        self.candles.loc[mask, 'y_end'] = self.grid_y[0] + (self.candles.loc[mask, 'high'] - self.data_min) * self.grid_y_length / self.data_length
+
 
     async def quit(self):
         """Cleanup, close the window, and quit SDL2."""

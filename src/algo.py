@@ -5,16 +5,16 @@ async def algo(window: classmethod):
     for i in range(100):
         candle = {
                 "information": True,
-                "open": i,
+                "open": 0,
                 "close": 0,
-                "high": 0,
-                "low": 0,
+                "high": i,
+                "low": 0.8 * i,
                 "x_start": 0,
                 "x_end": 0
             }
         window.addCandle(candle)
 
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(1)
 
     return
 
