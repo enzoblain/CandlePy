@@ -1,20 +1,16 @@
-# External imports
 import asyncio
+import numpy as np
+import pandas as pd
 
 async def algo(window: classmethod):
-    for i in range(100):
-        candle = {
-                "information": True,
-                "open": 0,
-                "close": 0,
-                "high": i,
-                "low": 0.8 * i,
-                "x_start": 0,
-                "x_end": 0
-            }
-        window.addCandle(candle)
+    data = pd.read_csv("data/candles.csv")
 
-        await asyncio.sleep(1)
+    data["direction"] = np.where(data["close"] > data["open"], "Bullish", "Bearish")
+
+    for i in range(len(data)):
+        window.addCandle(data.iloc[i])
+
+        await asyncio.sleep(0.2)
 
     return
 

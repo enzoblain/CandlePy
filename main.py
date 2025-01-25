@@ -1,8 +1,6 @@
-# Local Imports
 from src.algo import algo
 from src.api import SDL2Window
 
-# External imports
 import asyncio
 
 async def main():

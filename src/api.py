@@ -1,4 +1,3 @@
-# External imports
 import asyncio
 import pandas as pd
 import numpy as np
@@ -13,16 +12,15 @@ class SDL2Window:
         self.window = None
         self.running = False
         self.renderer = None
+        self.sdl_renderer = None
         self.margin = margin
         self.grid_y = (0 + margin[0], size[1] - margin[0])
         self.grid_y_length = self.grid_y[1] - self.grid_y[0]
         self.data_max = 0
         self.data_min = 0
         self.data_length = 0
-
-        self.quit_event = asyncio.Event()  # Event to signal the window to quit
-
-        self.cols = round((size[0] * 0.8) // grid_size) # Number of candles that can fit in the window, leaving a right margin of 20%
+        self.quit_event = asyncio.Event()
+        self.cols = round((size[0] * 0.8) // grid_size)
 
         candles_dict = {
             "information": [False] * self.cols,
@@ -31,24 +29,25 @@ class SDL2Window:
             "high": [0] * self.cols,
             "low": [0] * self.cols,
             "x_start": [0] * self.cols,
+            "x_center": [0] * self.cols,
             "x_end": [0] * self.cols,
-            "y_start": [0] * self.cols,
-            "y_end": [0] * self.cols
+            "y_body_start": [0] * self.cols,
+            "y_body_end": [0] * self.cols,
+            "y_wick_high": [0] * self.cols,
+            "y_wick_low": [0] * self.cols,
         }
 
         self.candles = pd.DataFrame(candles_dict)
-
         self.getCandlesXCoord()
 
     async def init(self):
-        """Initialize SDL2 and create a window."""
         try:
             sdl2.ext.init()
 
             self.window = sdl2.ext.Window(self.title, size=self.size)
             self.window.show()
-
             self.renderer = sdl2.ext.Renderer(self.window)
+            self.sdl_renderer = self.renderer.renderer
             self.running = True
 
             print(f"SDL2 initialized, window created with size: {self.size}")
@@ -57,7 +56,6 @@ class SDL2Window:
             print(f"Error initializing SDL2: {e}")
 
     async def handle_events(self):
-        """Handle events within the window."""
         events = sdl2.ext.get_events()
 
         for event in events:
@@ -67,83 +65,104 @@ class SDL2Window:
                 asyncio.Task.cancel()
 
     async def run(self):
-        """Run the event loop."""
         await self.init()
 
         while self.running:
             await self.handle_events()
-
-            self.renderer.clear() # Clear the window
-
-            self.renderer.present() # Update the window
-
             await asyncio.sleep(0.01)
 
         await self.quit()
 
     def addCandle(self, candle: dict):
-        """Add a candle to the chart."""
+        filtered_candles = self.candles[self.candles["information"] == True]
 
-        filtered_candles = self.candles[self.candles["information"] == True] # Get the candles with information
+        candle["information"] = True
+        candle = pd.DataFrame([candle])
 
-        self.updataDataChars(candle)
-
-        if not filtered_candles.empty: # If there is a candle with information
+        if not filtered_candles.empty:
             last_candle_index = filtered_candles.index[-1]
 
-            if last_candle_index == self.cols - 1: # If the dataframe is full of candles with information
-                candle = pd.DataFrame([candle])
+            if last_candle_index == self.cols - 1:
+                self.candles = self.candles.drop(index=0).reset_index(drop=True)
+                self.candles = pd.concat([self.candles, candle], ignore_index=True)
 
-                self.candles = self.candles.drop(index=0).reset_index(drop=True) # Remove the first candle from the dataframe
-                self.candles = pd.concat([self.candles, candle], ignore_index=True) # Add the candle to the dataframe on the last position
-
-            else: # If the dataframe is not full of candles with information
-                self.candles.loc[last_candle_index + 1] = candle # Add the candle to the dataframe on the next position
+            else:
+                self.candles.loc[last_candle_index + 1] = candle.iloc[0]
             
-        else: # If there is no candle with information
-            candle = pd.DataFrame([candle])
+        else:
+            self.candles = self.candles.drop(index=0).reset_index(drop=True)
+            self.candles = pd.concat([candle, self.candles], ignore_index=True)
 
-            self.candles = self.candles.drop(index=0).reset_index(drop=True) # Remove the first candle from the dataframe
-            self.candles = pd.concat([candle, self.candles], ignore_index=True) # Add the candle to the dataframe on the first position
-
+        self.updataDateChars()
         self.getCandlesXCoord()
         self.getCandlesYCoord()
-
-        print(self.candles)
+        self.drawCandles()
 
     def getCandlesXCoord(self):
-        """Define the x-coordinates of the candles."""
         self.candles["x_start"] = np.arange(0, len(self.candles) * self.grid_size, self.grid_size)
         self.candles["x_start"] = self.margin[0] + self.candles["x_start"]
+        self.candles["x_center"] = self.candles["x_start"] + self.grid_size // 2 + 1
         self.candles["x_end"] = self.candles["x_start"] + self.grid_size
 
-    def updataDataChars(self, candle: dict):
-        """Update the information of the candle."""
-        changes = False
-
-        if candle["high"] > self.data_max:
-            self.data_max = candle["high"]
-            changes = True
-        
-        if candle["low"] < self.data_min:
-            self.data_min = candle["low"]
-            changes = True
-
-        if changes:
-            self.data_length = self.data_max - self.data_min
-
-    def getCandlesYCoord(self):
-        """Define the y-coordinates of the candles."""
-        # Create a mask for candles where information is True
+    def updataDateChars(self):
         mask = self.candles['information'] == True
 
-        # Apply the calculation to only those rows where the condition is True to minimize the number of calculations
-        self.candles.loc[mask, 'y_start'] = self.grid_y[0] + (self.candles.loc[mask, 'low'] - self.data_min) * self.grid_y_length / self.data_length
-        self.candles.loc[mask, 'y_end'] = self.grid_y[0] + (self.candles.loc[mask, 'high'] - self.data_min) * self.grid_y_length / self.data_length
+        self.data_max = self.candles.loc[mask, "high"].max()
+        self.data_min = self.candles.loc[mask, "low"].min()
+        self.data_length = self.data_max - self.data_min
 
+    def getCandlesYCoord(self):
+        mask = self.candles['information'] == True
+
+        self.candles.loc[mask, 'y_body_start'] = self.grid_y[1] - round(
+            (self.candles.loc[mask, ['open', 'close']].min(axis=1) - self.data_min) * self.grid_y_length / self.data_length
+        )
+        self.candles.loc[mask, 'y_body_end'] = self.grid_y[1] - round(
+            (self.candles.loc[mask, ['open', 'close']].max(axis=1) - self.data_min) * self.grid_y_length / self.data_length
+        )
+
+        self.candles.loc[mask, 'y_wick_high'] = self.grid_y[1] - round(
+            (self.candles.loc[mask, 'high'] - self.data_min) * self.grid_y_length / self.data_length
+        )
+        self.candles.loc[mask, 'y_wick_low'] = self.grid_y[1] - round(
+            (self.candles.loc[mask, 'low'] - self.data_min) * self.grid_y_length / self.data_length
+        )
+
+    def drawRectangle(self, x_start, y_start, x_end, y_end, color):
+        rectangle = sdl2.SDL_Rect(
+            int(x_start),
+            int(y_start),
+            int(x_end - x_start),
+            int(y_end - y_start)
+        )
+
+        sdl2.SDL_SetRenderDrawColor(self.sdl_renderer, color[0], color[1], color[2], 255)
+        sdl2.SDL_RenderFillRect(self.sdl_renderer, rectangle)
+
+    def drawLine(self, x, y_start, y_end, color):
+        sdl2.SDL_SetRenderDrawColor(self.sdl_renderer, color[0], color[1], color[2], 255)
+        sdl2.SDL_RenderDrawLine(self.sdl_renderer, int(x), int(y_start), int(x), int(y_end))
+
+    def drawCandles(self):
+        sdl2.SDL_SetRenderDrawColor(self.sdl_renderer, 0, 0, 0, 255)
+        sdl2.SDL_RenderClear(self.sdl_renderer)
+
+        for i in range(len(self.candles)):
+            candle = self.candles.iloc[i]
+
+            if candle["information"]:
+                if candle["direction"] == "Bullish":
+                    self.drawRectangle(candle["x_start"], candle["y_body_start"], candle["x_end"], candle["y_body_end"], (0, 255, 0))
+                    self.drawLine(candle["x_center"], candle["y_wick_high"], candle["y_body_end"], (0, 255, 0))
+                    self.drawLine(candle["x_center"], candle["y_wick_low"], candle["y_body_start"], (0, 255, 0))
+                else:
+                    self.drawRectangle(candle["x_start"], candle["y_body_start"], candle["x_end"], candle["y_body_end"], (255, 0, 0))
+                    self.drawLine(candle["x_center"], candle["y_wick_high"], candle["y_body_end"], (255, 0, 0))
+                    self.drawLine(candle["x_center"], candle["y_wick_low"], candle["y_body_start"], (255, 0, 0))
+
+        sdl2.SDL_RenderPresent(self.sdl_renderer)
 
     async def quit(self):
-        """Cleanup, close the window, and quit SDL2."""
         if self.window:
             self.window.close()  
 
