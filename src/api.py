@@ -22,6 +22,7 @@ class SDL2Window:
         self.quit_event = asyncio.Event()
         self.cols = round((size[0] * 0.8) // grid_size)
         self.theme = theme
+        self.paused = False
 
         candles_dict = {
             "information": [False] * self.cols,
@@ -62,14 +63,18 @@ class SDL2Window:
         for event in events:
             if event.type == sdl2.SDL_QUIT:
                 self.running = False
-                
+
                 asyncio.Task.cancel()
+
+            if event.type == sdl2.SDL_KEYDOWN and event.key.keysym.sym == sdl2.SDLK_SPACE:
+                self.paused = not self.paused
 
     async def run(self):
         await self.init()
 
         while self.running:
             await self.handle_events()
+
             await asyncio.sleep(0.01)
 
         await self.quit()
