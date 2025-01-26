@@ -5,7 +5,7 @@ import sdl2
 import sdl2.ext
 
 class SDL2Window:
-    def __init__(self, title="PySDL2 Window", size=(800, 600), grid_size=15, margin=(15, 20)):
+    def __init__(self, title="PySDL2 Window", size=(800, 600), grid_size=15, margin=(15, 20), theme=None):
         self.title = title
         self.size = size
         self.grid_size = grid_size
@@ -21,6 +21,7 @@ class SDL2Window:
         self.data_length = 0
         self.quit_event = asyncio.Event()
         self.cols = round((size[0] * 0.8) // grid_size)
+        self.theme = theme
 
         candles_dict = {
             "information": [False] * self.cols,
@@ -76,7 +77,6 @@ class SDL2Window:
     def addCandle(self, candle: dict):
         filtered_candles = self.candles[self.candles["information"] == True]
 
-        candle["information"] = True
         candle = pd.DataFrame([candle])
 
         if not filtered_candles.empty:
@@ -144,7 +144,7 @@ class SDL2Window:
         sdl2.SDL_RenderDrawLine(self.sdl_renderer, int(x), int(y_start), int(x), int(y_end))
 
     def drawCandles(self):
-        sdl2.SDL_SetRenderDrawColor(self.sdl_renderer, 0, 0, 0, 255)
+        sdl2.SDL_SetRenderDrawColor(self.sdl_renderer, *self.theme["Background"])
         sdl2.SDL_RenderClear(self.sdl_renderer)
 
         for i in range(len(self.candles)):
@@ -152,13 +152,11 @@ class SDL2Window:
 
             if candle["information"]:
                 if candle["direction"] == "Bullish":
-                    self.drawRectangle(candle["x_start"], candle["y_body_start"], candle["x_end"], candle["y_body_end"], (0, 255, 0))
-                    self.drawLine(candle["x_center"], candle["y_wick_high"], candle["y_body_end"], (0, 255, 0))
-                    self.drawLine(candle["x_center"], candle["y_wick_low"], candle["y_body_start"], (0, 255, 0))
+                    self.drawRectangle(candle["x_start"], candle["y_body_start"], candle["x_end"], candle["y_body_end"], self.theme["Candle"]["Bullish"])
+                    self.drawLine(candle["x_center"], candle["y_wick_high"], candle["y_wick_low"], self.theme["Candle"]["Bullish"])
                 else:
-                    self.drawRectangle(candle["x_start"], candle["y_body_start"], candle["x_end"], candle["y_body_end"], (255, 0, 0))
-                    self.drawLine(candle["x_center"], candle["y_wick_high"], candle["y_body_end"], (255, 0, 0))
-                    self.drawLine(candle["x_center"], candle["y_wick_low"], candle["y_body_start"], (255, 0, 0))
+                    self.drawRectangle(candle["x_start"], candle["y_body_start"], candle["x_end"], candle["y_body_end"], self.theme["Candle"]["Bearish"])
+                    self.drawLine(candle["x_center"], candle["y_wick_high"], candle["y_wick_low"], self.theme["Candle"]["Bearish"])
 
         sdl2.SDL_RenderPresent(self.sdl_renderer)
 
