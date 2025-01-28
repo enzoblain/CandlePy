@@ -3,6 +3,9 @@ import pandas as pd
 import numpy as np
 import sdl2
 import sdl2.ext
+from PIL import Image
+from ctypes import cast, POINTER, c_ubyte
+from datetime import datetime
 
 class SDL2Window:
     def __init__(self, title="PySDL2 Window", size=(800, 600), grid_size=15, margin=(15, 20), theme=None):
@@ -68,6 +71,9 @@ class SDL2Window:
 
             if event.type == sdl2.SDL_KEYDOWN and event.key.keysym.sym == sdl2.SDLK_SPACE:
                 self.paused = not self.paused
+
+            if event.type == sdl2.SDL_KEYDOWN and event.key.keysym.sym == sdl2.SDLK_RETURN:
+                self.screenShot()
 
     async def run(self):
         await self.init()
@@ -164,6 +170,56 @@ class SDL2Window:
                     self.drawLine(candle["x_center"], candle["y_wick_high"], candle["y_wick_low"], self.theme["Candle"]["Bearish"])
 
         sdl2.SDL_RenderPresent(self.sdl_renderer)
+
+    def screenShot(self, filename=None):
+        try:
+            surface = sdl2.SDL_CreateRGBSurface(
+                0,  # flags
+                self.size[0],  # width
+                self.size[1],  # height
+                32,  # depth
+                0x00FF0000,  # Rmask
+                0x0000FF00,  # Gmask
+                0x000000FF,  # Bmask
+                0xFF000000   # Amask
+            )
+            
+            if not surface:
+                print(f"Error creating surface: {sdl2.SDL_GetError().decode()}")
+                return
+
+            if sdl2.SDL_RenderReadPixels(
+                self.sdl_renderer,
+                None,  # rect=None means entire renderer
+                surface.contents.format.contents.format,
+                surface.contents.pixels,
+                surface.contents.pitch
+            ) < 0:
+                print(f"Error reading pixels: {sdl2.SDL_GetError().decode()}")
+                sdl2.SDL_FreeSurface(surface)
+                return
+
+            pixels = cast(surface.contents.pixels, POINTER(c_ubyte))
+            pixel_data = bytes(pixels[: self.size[0] * self.size[1] * 4])
+            
+            image = Image.frombytes(
+                'RGBA',
+                self.size,
+                pixel_data,
+                'raw',
+                'BGRA'  
+            )
+
+            if not filename:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"screenshot_{timestamp}.png"
+
+            image.save(filename)
+
+            sdl2.SDL_FreeSurface(surface)
+
+        except Exception as e:
+            print(f"Error taking screenshot: {str(e)}")
 
     async def quit(self):
         if self.window:
