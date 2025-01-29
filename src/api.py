@@ -53,6 +53,7 @@ class SDL2Window:
             "close": [0] * self.cols,
             "high": [0] * self.cols,
             "low": [0] * self.cols,
+            "direction": [0] * self.cols,
 
             "x_start": [0] * self.cols,
             "x_center": [0] * self.cols,
